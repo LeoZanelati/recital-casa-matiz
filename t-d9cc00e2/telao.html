@@ -99,7 +99,7 @@ body.idle{cursor:none}
 .prog b{display:block;height:100%;background:var(--gold);width:0;transition:width 1.4s .4s ease}
 
 /* ---------- abertura Tea's Band ---------- */
-.ab{position:absolute;inset:0}
+.ab{position:absolute;top:0;bottom:0;left:50%;width:1920px;margin-left:-960px}
 .badge{position:absolute;left:150px;top:230px;width:620px;height:620px}
 .badge::before{content:"";position:absolute;inset:-70px;border-radius:50%;background:radial-gradient(circle,rgba(255,176,0,.38),transparent 68%);animation:breathe 5s ease-in-out infinite alternate}
 .badge::after{content:"";position:absolute;inset:-26px;border-radius:50%;border:2px dashed rgba(235,211,162,.45);animation:spin 90s linear infinite}
@@ -672,7 +672,8 @@ function updateDbg(){
 }
 setInterval(()=>{ updateDbg(); if(PL[cur]&&PL[cur].k==='start') updateStart() },1000);
 
-function fit(){const s=Math.min(innerWidth/1920,innerHeight/1080);$stage.style.transform=`translate(${(innerWidth-1920*s)/2}px,${(innerHeight-1080*s)/2}px) scale(${s})`}
+/* palco 1920×1080 que se estica na horizontal quando a janela é mais larga que 16:9 (sem bordas pretas laterais) */
+function fit(){const s=Math.min(innerWidth/1920,innerHeight/1080), W=Math.max(1920,innerWidth/s);$stage.style.width=W+'px';$stage.style.transform=`translate(${(innerWidth-W*s)/2}px,${(innerHeight-1080*s)/2}px) scale(${s})`}
 addEventListener('resize',fit); fit();
 addEventListener('keydown',e=>{
   const k=e.key; if(e.ctrlKey||e.metaKey||e.altKey) return;
