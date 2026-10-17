@@ -241,6 +241,9 @@ body.idle{cursor:none}
 .fim .pop{width:150px;height:175px;margin-bottom:10px;opacity:0;animation:fade 1s .2s forwards}
 .fim .go{margin-top:34px;font-size:30px;color:var(--smoke);opacity:0;animation:fade 1s 1.6s forwards}
 .fim .go b{color:var(--gold);font-weight:700}
+.pick{position:relative;z-index:6;margin-top:26px;padding:14px 30px;border-radius:12px;border:2px solid var(--gold);background:rgba(255,176,0,.12);color:var(--champ);font:inherit;font-size:30px;font-weight:700;cursor:pointer}
+.pick.sm{font-size:22px;padding:10px 20px;font-weight:600;margin-left:12px}
+.pick:hover{background:rgba(255,176,0,.25)}
 .start .sel{font-size:62px;font-weight:800;font-stretch:88%;color:var(--gold);margin:8px 0 4px}
 .fim .cd{margin-top:34px;font-size:44px;color:var(--smoke);opacity:0;animation:fade 1s 1.3s forwards}
 .fim .cd b{color:var(--gold);font-size:76px;font-weight:700;font-stretch:90%;display:block;letter-spacing:.04em;font-variant-numeric:tabular-nums}
@@ -475,41 +478,80 @@ function kids(){
 }
 const bgFor = it => (it.r && it.r.bg==='infantil') ? kids() : cinema(hue((it.r&&(it.r.filme||it.r.peca))||'x'));
 
-/* ====== vídeo (arquivo local → YouTube online → fundo animado) ====== */
+/* ====== vídeo (pasta escolhida → arquivo ao lado da página → YouTube → fundo animado) ====== */
 let cleanup=null, VID={};
+const LOCAL=new Map();                       // nome (minúsculo, com e sem extensão) -> File da pasta escolhida
+const isVid=f=>/^video\//.test(f.type)||/\.(mp4|webm|mov|m4v|ogv)$/i.test(f.name);
+function localKeys(r){ const k=[]; if(r.arq){ const a=r.arq.toLowerCase(); k.push(a,a.replace(/\.[^.]+$/,'')) } if(r.yt) k.push(r.yt.toLowerCase()); return k }
+function localFor(r){ if(!LOCAL.size) return null; for(const k of localKeys(r)) if(LOCAL.has(k)) return LOCAL.get(k); return null }
+function loadFolder(files){
+  LOCAL.clear(); let n=0;
+  for(const f of files){ if(!isVid(f)) continue; n++; const nm=f.name.toLowerCase(); LOCAL.set(nm,f); const b=nm.replace(/\.[^.]+$/,''); if(!LOCAL.has(b)) LOCAL.set(b,f) }
+  updateStart(); updateDbg();
+}
+function fmtT(s){ if(s==null) return ''; s=Math.round(s); const h=Math.floor(s/3600), m=Math.floor(s%3600/60), x=s%60; return (h?h+':'+String(m).padStart(2,'0'):m)+':'+String(x).padStart(2,'0') }
+function downloadList(){                       // CSV com os arquivos que a pasta precisa ter (sempre a partir da planilha atual)
+  const by=new Map(), none=[];
+  DATA.rows.filter(r=>r.tipo==='Apresentação'||r.tipo==='Encerramento').forEach(r=>{
+    const key=r.arq?r.arq.replace(/\.[^.]+$/,''):r.yt;
+    if(!key){ none.push(r); return }
+    const e=by.get(key)||{key,arq:r.arq,yt:r.yt,m:[],s:[],tr:[]};
+    const nm=r.peca+(r.tipo==='Encerramento'?' (coral)':''); if(!e.m.includes(nm)) e.m.push(nm);
+    if(!e.s.includes(r.sessao)) e.s.push(r.sessao);
+    const tr=(r.ini!=null||r.fim!=null)?fmtT(r.ini||0)+' a '+(r.fim!=null?fmtT(r.fim):'fim'):'inteiro'; if(!e.tr.includes(tr)) e.tr.push(tr);
+    by.set(key,e);
+  });
+  const q=s=>'"'+String(s??'').replace(/"/g,'""')+'"';
+  const L=[['Nome do arquivo (exato)','Música(s)','Sessão(ões)','Trecho(s) usado(s)','Link do YouTube','Situação'].map(q).join(';')];
+  [...by.values()].sort((a,b)=>a.s[0].localeCompare(b.s[0])||a.m[0].localeCompare(b.m[0],'pt-BR')).forEach(e=>{
+    L.push([e.arq||(e.yt+'.mp4'),e.m.join(' / '),e.s.join(', '),e.tr.join(' | '),e.yt?'https://www.youtube.com/watch?v='+e.yt:'',LOCAL.size?(localFor({arq:e.arq,yt:e.yt})?'OK na pasta':'FALTA'):''].map(q).join(';'));
+  });
+  none.forEach(r=>L.push(['(sem vídeo)',r.peca+(r.tipo==='Encerramento'?' (coral)':''),r.sessao,'','','sem link na planilha: usa fundo animado'].map(q).join(';')));
+  const a=document.createElement('a'); a.href=URL.createObjectURL(new Blob(['\ufeff'+L.join('\r\n')],{type:'text/csv;charset=utf-8'})); a.download='arquivos-de-video-recital.csv';
+  document.body.appendChild(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(a.href),4000);
+}
+function localStats(){ const it=PL.filter(x=>(x.k==='perf'||x.k==='enc')&&x.r&&(x.r.yt||x.r.arq)); const ok=it.filter(x=>localFor(x.r)); return {total:it.length, ok:ok.length, miss:it.filter(x=>!localFor(x.r)).map(x=>(x.r.peca||'?')+(x.r.yt?' ['+x.r.yt+']':''))} }
 function mountVideo(host,r,muted){
   VID={yt:r.yt,arq:r.arq,mode:'—',state:'',err:'',msgs:0};
   const start=r.ini||0, show=()=>host.classList.add('show');
-  if(r.arq){
-    const v=document.createElement('video'); v.src='videos/'+r.arq; v.muted=muted; v.autoplay=true; v.playsInline=true; VID.mode='arquivo local videos/'+r.arq;
-    v.onloadedmetadata=()=>{ v.currentTime=start }; v.onplaying=show; v.onerror=()=>{ VID.mode='arquivo local NÃO encontrado → fundo animado'; v.remove() };
+  const yt=()=>{
+    if(!r.yt){ VID.mode='sem link → fundo animado'; return }
+    if(YT_OFF){ VID.mode='YouTube desligado (?yt=0)'; return }
+    if(!navigator.onLine){ VID.mode='sem internet → fundo animado'; return }
+    VID.mode='YouTube (aguardando)';
+    const f=document.createElement('iframe');
+    const q=new URLSearchParams({autoplay:1,mute:1,controls:0,disablekb:1,fs:0,rel:0,modestbranding:1,iv_load_policy:3,playsinline:1,enablejsapi:1,start:start});
+    if(r.fim) q.set('end',r.fim); if(/^https?:$/.test(location.protocol)) q.set('origin',location.origin);
+    f.src='https://www.youtube-nocookie.com/embed/'+r.yt+'?'+q;
+    f.allow='autoplay; encrypted-media; picture-in-picture'; f.referrerPolicy='strict-origin-when-cross-origin';
+    const post=o=>{ try{ f.contentWindow.postMessage(typeof o==='string'?o:JSON.stringify(o),'*') }catch(e){} };
+    const hs=()=>{ post({event:'listening',id:1,channel:'widget'}); post({event:'command',func:'addEventListener',args:['onStateChange']}); post({event:'command',func:'addEventListener',args:['onError']}); };
+    const hsT=setInterval(()=>{ if(VID.msgs>0) clearInterval(hsT); else hs() },600);
+    const noRes=setTimeout(()=>{ if(!VID.msgs) VID.mode='YouTube sem resposta (provável bloqueio do player)' },8000);
+    f.onload=hs;
+    const onmsg=e=>{ if(e.source!==f.contentWindow) return; let d=e.data; if(typeof d==='string'){ try{ d=JSON.parse(d) }catch{ return } } if(!d||!d.event) return; VID.msgs++;
+      if(d.event==='onError'){ VID.err=String(d.info); VID.mode='YouTube erro '+d.info+' → fundo animado'; host.classList.remove('show'); f.remove(); return }
+      const st = d.event==='onStateChange' ? d.info : (d.event==='infoDelivery' && d.info && d.info.playerState!==undefined ? d.info.playerState : undefined);
+      if(st!==undefined){ VID.state=st; if(st===1){ VID.mode='YouTube tocando'; show() }
+        if(st===0 && d.event==='onStateChange'){ post({event:'command',func:'seekTo',args:[start,true]}); post({event:'command',func:'playVideo',args:[]}) } } };
+    addEventListener('message',onmsg);
+    if(!GATE) f.onload=()=>{ hs(); show() };
+    host.appendChild(f);
+    cleanup=()=>{ clearInterval(hsT); clearTimeout(noRes); removeEventListener('message',onmsg); f.remove() };
+  };
+  const lf=localFor(r);
+  if(lf || r.arq){                                   // arquivo (sempre mudo; se falhar, cai para o YouTube)
+    const url=lf?URL.createObjectURL(lf):'videos/'+r.arq;
+    const v=document.createElement('video'); v.src=url; v.muted=true; v.autoplay=true; v.playsInline=true;
+    VID.mode=lf?'arquivo da pasta escolhida: '+lf.name:'arquivo ao lado da página videos/'+r.arq;
+    const drop=()=>{ v.pause(); v.remove(); if(lf) URL.revokeObjectURL(url) };
+    v.onloadedmetadata=()=>{ v.currentTime=start }; v.onplaying=show;
+    v.onerror=()=>{ drop(); VID.err='arquivo'; yt(); if(/^YouTube/.test(VID.mode)) VID.mode+=' (arquivo local falhou)'; else VID.mode='arquivo local falhou → '+VID.mode };
     v.ontimeupdate=()=>{ if(r.fim && v.currentTime>=r.fim) v.currentTime=start };
     v.onended=()=>{ v.currentTime=start; v.play() };
-    host.appendChild(v); cleanup=()=>{v.pause();v.remove()}; return;
+    host.appendChild(v); cleanup=drop; return;
   }
-  if(!r.yt){ VID.mode='sem link → fundo animado'; return }
-  if(YT_OFF){ VID.mode='YouTube desligado (?yt=0)'; return }
-  if(!navigator.onLine){ VID.mode='sem internet → fundo animado'; return }
-  VID.mode='YouTube (aguardando)';
-  const f=document.createElement('iframe');
-  const q=new URLSearchParams({autoplay:1,mute:muted?1:0,controls:0,disablekb:1,fs:0,rel:0,modestbranding:1,iv_load_policy:3,playsinline:1,enablejsapi:1,start:start});
-  if(r.fim) q.set('end',r.fim); if(/^https?:$/.test(location.protocol)) q.set('origin',location.origin);
-  f.src='https://www.youtube-nocookie.com/embed/'+r.yt+'?'+q;
-  f.allow='autoplay; encrypted-media; picture-in-picture'; f.referrerPolicy='strict-origin-when-cross-origin';
-  const post=o=>{ try{ f.contentWindow.postMessage(typeof o==='string'?o:JSON.stringify(o),'*') }catch(e){} };
-  const hs=()=>{ post({event:'listening',id:1,channel:'widget'}); post({event:'command',func:'addEventListener',args:['onStateChange']}); post({event:'command',func:'addEventListener',args:['onError']}); };
-  const hsT=setInterval(()=>{ if(VID.msgs>0) clearInterval(hsT); else hs() },600);
-  const noRes=setTimeout(()=>{ if(!VID.msgs) VID.mode='YouTube sem resposta (provável bloqueio do player)' },8000);
-  f.onload=hs;
-  const onmsg=e=>{ if(e.source!==f.contentWindow) return; let d=e.data; if(typeof d==='string'){ try{ d=JSON.parse(d) }catch{ return } } if(!d||!d.event) return; VID.msgs++;
-    if(d.event==='onError'){ VID.err=String(d.info); VID.mode='YouTube erro '+d.info+' → fundo animado'; host.classList.remove('show'); f.remove(); return }
-    const st = d.event==='onStateChange' ? d.info : (d.event==='infoDelivery' && d.info && d.info.playerState!==undefined ? d.info.playerState : undefined);
-    if(st!==undefined){ VID.state=st; if(st===1){ VID.mode='YouTube tocando'; show() }
-      if(st===0 && d.event==='onStateChange'){ post({event:'command',func:'seekTo',args:[start,true]}); post({event:'command',func:'playVideo',args:[]}) } } };
-  addEventListener('message',onmsg);
-  if(!GATE) f.onload=()=>{ hs(); show() };
-  host.appendChild(f);
-  cleanup=()=>{ clearInterval(hsT); clearTimeout(noRes); removeEventListener('message',onmsg); f.remove() };
+  yt();
 }
 
 /* ====== telas ====== */
@@ -548,7 +590,7 @@ function render(i){
   if(it.k==='start'){
     cls='start'; bg='<div style="position:absolute;inset:0;background:#000"></div>'; scrim=0;
     html=`<div class="center start"><img class="lg" src="${ASSET.logo}" alt="">${SESS&&DATA.cfg.sessoes[SESS]?`<div class="sel">Sessão ${SESS} · ${HR(SESS)}</div>`:''}<h2>Pressione ENTER (ou clique) para começar</h2><p>F tela cheia · M som · D diagnóstico · B tela preta${SESS?' · P painel':''}</p>
-      <div class="st" id="st"></div><div class="warn" id="warn" style="display:none"></div></div>`;
+      <button class="pick" id="pickbtn" type="button">Selecionar pasta de vídeos (V)</button> <button class="pick sm" id="listbtn" type="button">Baixar lista de arquivos (CSV)</button><div class="st" id="st"></div><div class="warn" id="warn" style="display:none"></div></div>`;
   }else if(it.k==='intro'){
     cls='intro'; scrim=0;
     const cols=['#ffb000','#ffc233','#d81f26','#6f1520','#ebd3a2','#ff7a00','#ffb000','#a8222f','#ffd36a','#ffb000','#d81f26'];
@@ -629,6 +671,7 @@ function updateStart(){
     line(navigator.onLine?'ok':'bad','Internet: '+(navigator.onLine?'conectado':'sem conexão (vídeos viram fundo animado)'))+
     line(S.ok===true?'ok':S.ok===false?'bad':'wait','Planilha: '+(S.ok===true?`sincronizada às ${when} (${S.tel} linhas)`:S.ok===false?'não consegui ler ('+esc(S.err)+') — usando a cópia salva':(SYNC.config?'sincronizando…':'links de publicação ainda não configurados — usando a cópia embutida')))+
     line(SESS&&DATA.cfg.sessoes[SESS]?'ok':'bad',SESS?(DATA.cfg.sessoes[SESS]?`Sessão deste link: ${SESS} (${HR(SESS)})`:`Sessão ${SESS} não existe na planilha`):'Sessão: todas (use ?s=A, ?s=B…)')+
+    (()=>{ const S=localStats(); return LOCAL.size?line(S.ok===S.total?'ok':'wait',`Vídeos da pasta: ${S.ok} de ${S.total} músicas com arquivo`+(S.miss.length?' · faltam '+S.miss.length+' (D mostra quais)':'')):line('wait','Vídeos da pasta: nenhuma pasta escolhida (usa o YouTube)') })()+
     line('ok',`Modo: ${DEMO?'modelo (abertura + 3 alunos por sessão) — use ?completo para todos':'completo'} · Som: ${SFX?'ligado':'desligado'}`);
   const w=document.getElementById('warn'); if(w){ if(location.protocol==='file:'){ w.style.display='block'; w.innerHTML='⚠ Arquivo aberto direto do computador (file://). O YouTube costuma recusar vídeos assim. Aperte D para ver o diagnóstico e teste na tela de uma música.' } else w.style.display='none'; }
 }
@@ -667,6 +710,7 @@ function updateDbg(){
    'planilha: '+(S.ok===true?'OK às '+S.when.toLocaleTimeString('pt-BR')+' · '+S.tel+' linhas':S.ok===false?'ERRO: '+S.err:(SYNC.config?'aguardando':'sem links'))+'   tentativas: '+S.tries,
    'dados em uso: '+DATA.cfg.built+' · '+DATA.rows.length+' linhas · sessão A '+HR('A'),
    'tela: '+(cur+1)+'/'+PL.length+' ('+it.k+')',
+   (LOCAL.size?'pasta de vídeos: '+localStats().ok+'/'+localStats().total+' com arquivo'+(localStats().miss.length?'\n  sem arquivo: '+localStats().miss.slice(0,12).join(', ')+(localStats().miss.length>12?' …':''):''):'pasta de vídeos: não escolhida'),
    it.r?['vídeo: '+(VID.mode||'—'),'  id: '+(VID.yt||'—')+'   estado player: '+(VID.state===''?'—':VID.state)+'   erro: '+(VID.err||'—')+'   mensagens do player: '+(VID.msgs||0)].join('\n'):''
   ].join('\n');
 }
@@ -686,9 +730,10 @@ addEventListener('keydown',e=>{
   else if(k==='r'||k==='R'){ const n=PL.findIndex(x=>x.k==='intro'); cur=-1; go(n) }
   else if(k==='d'||k==='D'){dbg.classList.toggle('on'); updateDbg()}
   else if(k==='h'||k==='H'||k==='?')showHint();
+  else if(k==='v'||k==='V'){ pickIn.click() }
   else if((k==='p'||k==='P') && SESS && PL[cur] && (PL[cur].k==='start'||onLast())) goPainel();
 });
-addEventListener('click',e=>{ if(e.clientX<innerWidth*.25) go(cur-1); else if(!onLast()) go(cur+1); });
+addEventListener('click',e=>{ if(e.target.closest&&e.target.closest('#pickbtn,#listbtn')) return; if(e.clientX<innerWidth*.25) go(cur-1); else if(!onLast()) go(cur+1); });
 let idleT; addEventListener('mousemove',()=>{document.body.classList.remove('idle');clearTimeout(idleT);idleT=setTimeout(()=>document.body.classList.add('idle'),2500)});
 
 /* ====== atualização ao vivo a partir da planilha ====== */
@@ -706,6 +751,9 @@ async function doSync(){ const n=await syncNow(DATA,'both'); if(n) applyData(n);
 setInterval(doSync,60000); addEventListener('online',doSync); doSync();
 
 if('serviceWorker' in navigator && /^https?:$/.test(location.protocol)) navigator.serviceWorker.register('sw-telao.js').catch(()=>{});
+const pickIn=document.createElement('input'); pickIn.type='file'; pickIn.multiple=true; pickIn.setAttribute('webkitdirectory',''); pickIn.hidden=true; pickIn.id='pickdir'; document.body.appendChild(pickIn);
+pickIn.addEventListener('change',()=>{ loadFolder([...pickIn.files]); pickIn.value='' });
+addEventListener('click',e=>{ const c=e.target.closest&&e.target.closest('#pickbtn,#listbtn'); if(c){ e.stopPropagation(); if(c.id==='pickbtn') pickIn.click(); else downloadList() } },true);
 const first=parseInt(location.hash.slice(1))||1; go(first-1); showHint();
 </script>
 </body>
