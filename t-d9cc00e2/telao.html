@@ -65,7 +65,7 @@ body.idle{cursor:none}
 .rate{display:inline-grid;place-items:center;width:44px;height:44px;border:2px solid var(--smoke);border-radius:5px;font-size:26px;font-weight:700;color:var(--smoke)}
 
 /* ---------- apresentação ---------- */
-.main{position:absolute;left:96px;bottom:128px;width:1240px}
+.main{position:absolute;left:96px;bottom:228px;width:1240px}   /* +100px: piano/bateria cobrem a parte de baixo */
 .tag{display:flex;align-items:center;gap:18px;font-size:30px;font-weight:600;font-stretch:90%;color:var(--champ);margin-bottom:26px}
 .live{display:inline-flex;align-items:center;gap:12px;background:var(--live);color:#fff;border-radius:6px;padding:6px 16px 6px 14px;font-size:26px;font-weight:700;letter-spacing:.04em}
 .live i{width:12px;height:12px;border-radius:50%;background:#fff;animation:pulse 1.6s ease-in-out infinite}
@@ -87,9 +87,9 @@ body.idle{cursor:none}
 .tag{animation-delay:.1s}.orig{animation-delay:1.1s}.who{animation-delay:1.35s}
 @keyframes fade{to{opacity:1}}
 .next,.next *{}
-.next{position:absolute;right:96px;bottom:128px;width:560px;display:flex;gap:22px;align-items:center;padding:20px 24px;border-radius:12px;
+.next{position:absolute;left:250px;top:58px;width:660px;display:flex;gap:22px;align-items:center;padding:14px 22px;border-radius:12px;
   background:rgba(14,11,9,.72);border:1px solid rgba(235,211,162,.28);backdrop-filter:blur(8px);opacity:0;animation:fade .7s 1.9s forwards}
-.next .th{flex:none;width:176px;height:99px;border-radius:6px;position:relative;overflow:hidden;background:
+.next .th{flex:none;width:160px;height:90px;border-radius:6px;position:relative;overflow:hidden;background:
   radial-gradient(ellipse 80% 90% at 70% 30%,hsl(var(--h,36) 70% 40%/.8),transparent),linear-gradient(135deg,#2a1d12,#0b0908)}
 .next .th svg{position:absolute;left:50%;top:50%;width:48px;height:48px;margin:-24px 0 0 -24px;stroke:#fff;fill:none;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round;opacity:.9}
 .next .lb{font-size:24px;font-weight:600;color:var(--champ);margin-bottom:4px}
@@ -105,7 +105,7 @@ body.idle{cursor:none}
 .badge::after{content:"";position:absolute;inset:-26px;border-radius:50%;border:2px dashed rgba(235,211,162,.45);animation:spin 90s linear infinite}
 @keyframes breathe{to{transform:scale(1.08);opacity:.75}}
 .badge img{position:relative;width:100%;height:100%;display:block;border-radius:50%;box-shadow:0 30px 90px rgba(0,0,0,.65)}
-.abtxt{position:absolute;left:900px;top:380px;right:96px}
+.abtxt{position:absolute;left:900px;top:280px;right:96px}
 .abtxt .tag{margin-bottom:6px}
 .cz{font-family:"Cinzel",serif;font-weight:900;color:var(--champ);text-shadow:0 2px 0 #8a6a2c,0 8px 30px rgba(0,0,0,.6);letter-spacing:.01em}
 .abtxt h1{font-size:150px;line-height:1.05;white-space:nowrap}
@@ -130,6 +130,7 @@ body.idle{cursor:none}
 .splash .ev{font-size:46px;font-weight:600;font-stretch:90%;color:#fff;margin-top:26px;opacity:0;animation:fade 1s 1s forwards}
 .splash .dt{font-size:36px;color:var(--smoke);margin-top:16px;opacity:0;animation:fade 1s 1.2s forwards}
 .rule{width:420px;height:2px;margin-top:40px;background:linear-gradient(90deg,transparent,var(--gold),transparent);opacity:0;animation:fade 1s .9s forwards}
+.center.fim{padding-bottom:200px}
 .fim h1{font-size:140px;opacity:0;animation:fade 1s .3s forwards}
 .fim .lg{height:150px;margin-bottom:34px;opacity:0;animation:fade 1s .1s forwards}
 .fim p{font-size:48px;font-weight:600;font-stretch:90%;margin-top:26px;opacity:0;animation:fade 1s .7s forwards}
@@ -220,7 +221,7 @@ body.idle{cursor:none}
 .clap .board small{display:block;font-size:19px;letter-spacing:.1em;white-space:nowrap;margin-top:6px;color:var(--champ);text-transform:uppercase}
 
 /* ---- legenda estilo streaming ---- */
-.cap{position:absolute;left:50%;bottom:30px;transform:translateX(-50%);max-width:1200px;padding:6px 26px 8px;border-radius:8px;background:rgba(0,0,0,.62);
+.cap{position:absolute;left:50%;bottom:130px;transform:translateX(-50%);max-width:1200px;padding:6px 26px 8px;border-radius:8px;background:rgba(0,0,0,.62);
   font-size:40px;font-weight:500;color:#fff;text-shadow:0 2px 3px #000;white-space:nowrap;opacity:0;animation:fade .6s var(--cd,2.2s) forwards;z-index:4}
 
 /* ---- splash v2 ---- */
