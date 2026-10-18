@@ -282,7 +282,7 @@ function sessHTML(s){
     else {
       const same = r.filme && r.filme.replace(/\s*\(\d{4}\)\s*$/,'').toLowerCase()===r.peca.toLowerCase();
       const sub=[r.comp,(r.filme&&!same)?r.filme:''].filter(Boolean).join(' · ');
-      h+=`<li class="row"><span class="n">${r.ordem}<small>cena</small></span><div><div class="who">${esc(r.prog)}</div><div class="pc">${esc(r.peca)}</div>${sub?`<div class="sub">${esc(sub)}</div>`:''}</div>${ic(r.instr)}</li>`;
+      h+=`<li class="row"><span class="n">${r.ordem}<small>cena</small></span><div><div class="who">${esc(r.aluno||r.prog)}</div><div class="pc">${esc(r.peca)}</div>${sub?`<div class="sub">${esc(sub)}</div>`:''}</div>${ic(r.instr)}</li>`;
     }
   });
   return h+`</ol><div class="fimsess"><b>FIM</b><span>${nx?`A Sessão ${nx} começa às ${C.sessoes[nx].ini}`:'Obrigado por fazer parte desta história!'}</span></div></section>`;
