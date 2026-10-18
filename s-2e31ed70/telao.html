@@ -507,6 +507,7 @@ function audioFor(r){ if(!LOCAL.size||pbPend(r)) return null; return LOCAL.get(n
 function loadFolder(files){
   LOCAL.clear(); let n=0;
   for(const f of files){ if(!isMedia(f)) continue; n++; const k=norm(f.name); if(k&&!LOCAL.has(k)) LOCAL.set(k,f) }
+  if(ARM&&!ARM.started) ARM.arm();
   updateStart(); updateDbg();
 }
 function fmtT(s){ if(s==null) return ''; s=Math.round(s); const h=Math.floor(s/3600), m=Math.floor(s%3600/60), x=s%60; return (h?h+':'+String(m).padStart(2,'0'):m)+':'+String(x).padStart(2,'0') }
@@ -588,19 +589,19 @@ const needsCue=r=>!!(r&&(r.pb||r.vsa));
 function armCue(el,r){
   const host=el.querySelector('.video'), vsa=!!r.vsa;
   const pill=document.createElement('div'); pill.className='armed'; if(NOPILL) pill.style.display='none'; el.appendChild(pill);
-  const af=vsa?null:audioFor(r), pend=!vsa&&pbPend(r), nm=esc(vsa?(r.arq||'vídeo'):(r.pb||'playback'));
-  const ready=vsa?!!(localFor(r)||r.arq):!!af;
+  let af=vsa?null:audioFor(r); const pend=!vsa&&pbPend(r), nm=esc(vsa?(r.arq||'vídeo'):(r.pb||'playback'));
+  let ready, noFolder; const chk=()=>{ af=vsa?null:audioFor(r); ready=vsa?!!localFor(r):!!af; noFolder=!LOCAL.size }; chk();
   const A={r,started:false,audio:null,url:'',pill};
   const setP=(c,t)=>{ pill.className='armed '+c; pill.innerHTML='<i></i><span>'+t+'</span>' };
-  A.arm=()=>{ if(ready) setP('',vsa?'VÍDEO PRONTO · avance para iniciar':'PLAYBACK PRONTO · avance para iniciar');
-    else setP('bad',vsa?'VÍDEO NÃO ENCONTRADO: '+nm:(pend?'PLAYBACK PENDENTE (sem arquivo) · avance':'PLAYBACK NÃO ENCONTRADO: '+nm)) };
+  A.arm=()=>{ chk(); if(ready) setP('',vsa?'VÍDEO PRONTO · avance para iniciar':'PLAYBACK PRONTO · avance para iniciar');
+    else setP('bad',pend&&!vsa?'PLAYBACK PENDENTE (sem arquivo) · avance':noFolder?'PASTA NÃO ESCOLHIDA · aperte V e escolha a pasta com '+(vsa?'o vídeo':'os playbacks'):(vsa?'VÍDEO NÃO ESTÁ NA PASTA: ':'PLAYBACK NÃO ESTÁ NA PASTA: ')+nm) };
   A.start=()=>{
-    A.started=true;
-    if(vsa){ el.classList.add('vsa-on'); mountVideo(host,r,false,{loop:false}); setP(ready?'go':'bad',ready?'VÍDEO NO AR · avance para seguir':'SEM ARQUIVO DO VÍDEO · avance para seguir'); VID.mode+=' (com áudio)'; return }
+    chk(); A.started=true;
+    if(vsa){ el.classList.add('vsa-on'); mountVideo(host,r,false,{loop:false}); setP(ready?'go':'bad',ready?'VÍDEO NO AR · avance para seguir':(noFolder?'PASTA NÃO ESCOLHIDA (V) · avance para seguir':'VÍDEO NÃO ESTÁ NA PASTA · avance para seguir')); VID.mode+=' (com áudio)'; return }
     if(af){ A.url=URL.createObjectURL(af); A.audio=new Audio(A.url);
       A.audio.onended=()=>setP('go','♪ PLAYBACK TERMINOU · avance para seguir');
       A.audio.play().then(()=>setP('go','♪ PLAYBACK TOCANDO · avance para seguir')).catch(()=>setP('bad','NAVEGADOR BLOQUEOU O ÁUDIO · clique na tela')) }
-    else setP('bad',pend?'SEM PLAYBACK (pendente) · avance para seguir':'SEM PLAYBACK (arquivo não encontrado) · avance');
+    else setP('bad',pend?'SEM PLAYBACK (pendente) · avance para seguir':(noFolder?'PASTA NÃO ESCOLHIDA (V) · avance para seguir':'PLAYBACK NÃO ESTÁ NA PASTA · avance'));
     mountVideo(host,r,true);
   };
   A.stop=()=>{ if(A.audio){ try{A.audio.pause()}catch(e){} A.audio=null } if(A.url){ URL.revokeObjectURL(A.url); A.url='' } };
@@ -685,7 +686,7 @@ function render(i){
     const line2=enc?`${icon('Coral')}<span>Casa Matiz</span>`:`${icon(r.instr)}<span>${esc(r.instr)}</span>`;
     html=topBar(it.s,it.ep)+(enc?'':clapper(it.s,r.ordem))+`<div class="main"><div class="tag">${enc?`<span>Encerramento da Sessão ${it.s}</span>`:`<span class="live"><i></i>AO VIVO</span><span>Apresentação ${r.ordem} de ${it.total}</span>`}</div>
       <h1 class="title" style="font-size:${fitTitle(r.peca)}px">${esc(r.peca)}</h1><p class="orig">${meta}</p>
-      <div class="who"><div class="name">${esc(who)}</div><div class="line2">${line2}</div></div></div>${nextCard(i)}${cap(enc?`♪ ${esc(r.peca)} ♪`:'♪ música ao vivo ♪',2.6)}`;
+      <div class="who"><div class="name">${esc(who)}</div><div class="line2">${line2}</div></div></div>${nextCard(i)}${enc?cap(`♪ ${esc(r.peca)} ♪`,2.6):''}`;
     bg=bgFor(it); vid=r; muted=true; pct=enc?100:Math.round(r.ordem/it.total*100); scrim=1;
   }else if(it.k==='creditos'){
     cls='credits'; html=creditsHTML(it.s); bg='<div style="position:absolute;inset:0;background:#000"></div>'; scrim=0;
