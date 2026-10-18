@@ -68,7 +68,7 @@ function parseTelao(csv){
   const H=t[0].map(h=>h.trim().toUpperCase());
   const ix=n=>H.findIndex(h=>h.startsWith(n));
   const c={sessao:ix('SESSÃO'),tipo:ix('TIPO'),ordem:ix('ORDEM'),aluno:ix('ALUNO'),prog:ix('NOME NO PROGRAMA'),prof:ix('PROFESSORA'),instr:ix('INSTRUMENTO'),
-    peca:ix('PEÇA'),comp:ix('COMPOSITOR'),filme:ix('FILME'),link:ix('LINK'),ini:ix('INÍCIO'),fim:ix('FIM'),arq:ix('ARQUIVO'),fundo:ix('FUNDO'),status:ix('STATUS')};
+    peca:ix('PEÇA'),comp:ix('COMPOSITOR'),filme:ix('FILME'),link:ix('LINK'),ini:ix('INÍCIO'),fim:ix('FIM'),arq:ix('ARQUIVO'),pb:ix('PLAYBACK'),vsa:ix('VÍDEO COM'),fundo:ix('FUNDO'),status:ix('STATUS')};
   if(c.sessao<0||c.tipo<0||c.ordem<0||c.aluno<0||c.peca<0) return null;
   const g=(r,k)=>c[k]>=0?String(r[c[k]]||'').trim():'';
   const out=[];
@@ -76,7 +76,7 @@ function parseTelao(csv){
     const s=g(r,'sessao').toUpperCase(), tipo=g(r,'tipo');
     if(!s||!tipo) continue;
     out.push({sessao:s,tipo,ordem:parseInt(g(r,'ordem'))||0,aluno:g(r,'aluno'),prog:g(r,'prog')||g(r,'aluno'),prof:g(r,'prof'),instr:g(r,'instr'),
-      peca:g(r,'peca'),comp:g(r,'comp'),filme:g(r,'filme'),yt:ytId(g(r,'link')),ini:toSec(g(r,'ini')),fim:toSec(g(r,'fim')),arq:g(r,'arq'),
+      peca:g(r,'peca'),comp:g(r,'comp'),filme:g(r,'filme'),yt:ytId(g(r,'link')),ini:toSec(g(r,'ini')),fim:toSec(g(r,'fim')),arq:g(r,'arq'),pb:g(r,'pb'),vsa:/^(s|sim|x|1)/i.test(g(r,'vsa')),
       bg:/infantil/i.test(g(r,'fundo'))?'infantil':'cinema',status:g(r,'status')});
   }
   return out.length?out:null;
@@ -140,7 +140,7 @@ async function syncNow(cur, need){
   }
 }
 
-const SNAP = {"cfg":{"titulo":"Música, Câmera, Ação!","evento":"10º Recital de Música da Casa Matiz","tema":"Filmes, séries, televisão","data":"18/10/2026","dataExtenso":"domingo, 18 de outubro de 2026","local":"Central de Decorados e sede da Opus Vendas (Showroom Marista)","endereco":"Alameda Ricardo Paranhos, Qd. 249, Lt 05, 10 e 11, Setor Marista, Goiânia - GO, CEP 74180-081","maps":"https://maps.app.goo.gl/tgmC1zkFskf4QXch6","waze":"https://waze.com/ul/h6vhbzpsm9","instagram":"https://www.instagram.com/casa.matiz/","entrada":"Entrada franca","sessoes":{"A":{"ini":"09:30","fim":"","n":28},"B":{"ini":"13:30","fim":"","n":24},"C":{"ini":"15:40","fim":"","n":26},"D":{"ini":"18:00","fim":"","n":30}},"banda":[{"n":"Amanda Caroline","i":"Violão, Bateria, Contrabaixo"},{"n":"Andréa Figueiredo","i":"Piano"},{"n":"Bruna Bites","i":"Piano"},{"n":"Déborah Grego","i":"Canto"},{"n":"Giovanna Francesca","i":"Piano"},{"n":"Luciana Sanches","i":"Violino"},{"n":"Maressa Mendanha","i":"Piano, Violão, Canto"},{"n":"Thaís Meister","i":"Canto"}],"built":"2026-10-12T19:46:23Z"},"rows":[]};
+const SNAP = {"cfg":{"titulo":"Música, Câmera, Ação!","evento":"10º Recital de Música da Casa Matiz","tema":"Filmes, séries, televisão","data":"18/10/2026","dataExtenso":"domingo, 18 de outubro de 2026","local":"Showroom Opus (Al. Ricardo Paranhos)","endereco":"Alameda Ricardo Paranhos, Qd. 249, Lt 05, 10 e 11, Setor Marista, Goiânia - GO, CEP 74180-081","maps":"https://maps.app.goo.gl/tgmC1zkFskf4QXch6","waze":"https://waze.com/ul/h6vhbzpsm9","instagram":"https://www.instagram.com/casa.matiz/","entrada":"Entrada franca","sessoes":{"A":{"ini":"09:30","fim":"","n":28},"B":{"ini":"13:30","fim":"","n":25},"C":{"ini":"15:40","fim":"","n":24},"D":{"ini":"18:00","fim":"","n":31}},"banda":[{"n":"Amanda Caroline","i":"Violão, Bateria, Contrabaixo"},{"n":"Andréa Figueiredo","i":"Piano"},{"n":"Bruna Bites","i":"Piano"},{"n":"Déborah Grego","i":"Canto"},{"n":"Giovanna Francesca","i":"Piano"},{"n":"Luciana Sanches","i":"Violino"},{"n":"Maressa Mendanha","i":"Piano, Violão, Canto"},{"n":"Thaís Meister","i":"Canto"}],"built":"2026-10-18T03:37:06.699Z"},"rows":[]};
 let DATA = loadCached(SNAP);
 const esc = s => String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 function render(){ const S=DATA.cfg.sessoes, ks=Object.keys(S);
