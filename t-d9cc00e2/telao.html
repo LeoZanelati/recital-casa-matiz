@@ -619,6 +619,9 @@ function mountVideo(host,r,muted,opt){
     const nocc=()=>{ ['captions','cc'].forEach(m=>post({event:'command',func:'unloadModule',args:[m]})) };
     const hs=()=>{ nocc(); post({event:'listening',id:1,channel:'widget'}); post({event:'command',func:'addEventListener',args:['onStateChange']}); post({event:'command',func:'addEventListener',args:['onError']}); };
     const hsT=setInterval(()=>{ if(VID.msgs>0) clearInterval(hsT); else hs() },600);
+    let kicks=0; const kick=setInterval(()=>{                 // o player às vezes carrega e fica "parado" (estado -1): manda tocar de novo, mudo, até começar
+      if(VID.state===1||VID.err||++kicks>45){ clearInterval(kick); return }
+      if(VID.msgs>0){ post({event:'command',func:'mute',args:[]}); post({event:'command',func:'playVideo',args:[]}) } },1200);
     const noRes=setTimeout(()=>{ if(!VID.msgs) VID.mode='YouTube sem resposta (provável bloqueio do player)' },8000);
     f.onload=hs;
     const onmsg=e=>{ if(e.source!==f.contentWindow) return; let d=e.data; if(typeof d==='string'){ try{ d=JSON.parse(d) }catch{ return } } if(!d||!d.event) return; VID.msgs++;
@@ -629,7 +632,7 @@ function mountVideo(host,r,muted,opt){
     addEventListener('message',onmsg);
     if(!GATE) f.onload=()=>{ hs(); show() };
     host.appendChild(f);
-    cleanup=()=>{ clearInterval(hsT); clearTimeout(noRes); removeEventListener('message',onmsg); f.remove() };
+    cleanup=()=>{ clearInterval(hsT); clearInterval(kick); clearTimeout(noRes); removeEventListener('message',onmsg); f.remove() };
   };
   const lf=localFor(r);
   if(lf || r.arq){                                   // arquivo (sempre mudo; se falhar, cai para o YouTube)
