@@ -501,9 +501,33 @@ const LOCAL=new Map();                       // nome normalizado (sem acento/esp
 const norm=s=>String(s||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/\.[^.]+$/,'').replace(/[^a-z0-9]+/g,'');
 const isMedia=f=>/^(video|audio)\//.test(f.type)||/\.(mp4|webm|mov|m4v|ogv|m4a|mp3|wav|aac|ogg|oga|flac|opus)$/i.test(f.name);
 function localKeys(r){ const k=[]; if(r.arq) k.push(norm(r.arq)); if(r.yt) k.push(norm(r.yt)); return k.filter(Boolean) }
-function localFor(r){ if(!LOCAL.size) return null; for(const k of localKeys(r)) if(LOCAL.has(k)) return LOCAL.get(k); return null }
+const REMOTE=new Map(), PREF={fail:new Set(),busy:false,tries:0};   // REMOTE: arquivos baixados de videos/ (site) -> File
+const hasMedia=()=>LOCAL.size>0||REMOTE.size>0;
+function localFor(r){ for(const k of localKeys(r)){ if(LOCAL.has(k)) return LOCAL.get(k); if(REMOTE.has(k)) return REMOTE.get(k) } return null }
+function mediaNeeds(){                         // arquivos que a sessão precisa (playbacks + vídeos próprios)
+  const m=new Map(); PL.filter(x=>(x.k==='perf'||x.k==='enc')&&x.r).forEach(x=>{ const r=x.r;
+    if(r.pb&&!pbPend(r)) m.set(norm(r.pb),{name:r.pb,kind:'pb',who:r.prog||r.peca});
+    if(r.arq) m.set(norm(r.arq),{name:r.arq,kind:'vid',who:r.prog||r.peca}) }); return m }
+const haveKey=k=>LOCAL.has(k)||REMOTE.has(k);
+function mediaStats(){ const n=mediaNeeds(); const miss=[...n.entries()].filter(([k])=>!haveKey(k)).map(([,v])=>v);
+  return {total:n.size, ok:n.size-miss.length, miss, busy:PREF.busy} }
+async function prefetchMedia(){                // baixa os arquivos da sessão (pasta videos/ ao lado da página) para a memória
+  if(!/^https?:$/.test(location.protocol)||PREF.busy) return;
+  const need=[...mediaNeeds().entries()].filter(([k])=>!haveKey(k)); if(!need.length) return;
+  PREF.busy=true; PREF.tries++; updateStart(); updateDbg();
+  for(const [k,v] of need){
+    try{ const res=await fetch(new URL('videos/'+encodeURIComponent(v.name),location.href).href); if(!res.ok) throw new Error(res.status);
+      const b=await res.blob(); if(!b.size) throw new Error('vazio');
+      REMOTE.set(k,new File([b],v.name,{type:b.type||(v.kind==='pb'?'audio/mp4':'video/mp4')})); PREF.fail.delete(k) }
+    catch(e){ PREF.fail.add(k) }
+    if(ARM&&!ARM.started) ARM.arm(); updateStart(); updateDbg();
+  }
+  PREF.busy=false; updateStart(); updateDbg();
+  if(mediaStats().miss.length&&PREF.tries<6) setTimeout(prefetchMedia,PREF.tries*10000);
+}
+addEventListener('online',()=>{ PREF.tries=0; prefetchMedia() });
 const pbPend=r=>!r.pb||/pendente/i.test(r.pb);
-function audioFor(r){ if(!LOCAL.size||pbPend(r)) return null; return LOCAL.get(norm(r.pb))||null }
+function audioFor(r){ if(pbPend(r)) return null; const k=norm(r.pb); return LOCAL.get(k)||REMOTE.get(k)||null }
 function loadFolder(files){
   LOCAL.clear(); let n=0;
   for(const f of files){ if(!isMedia(f)) continue; n++; const k=norm(f.name); if(k&&!LOCAL.has(k)) LOCAL.set(k,f) }
@@ -572,7 +596,7 @@ function mountVideo(host,r,muted,opt){
   if(lf || r.arq){                                   // arquivo (sempre mudo; se falhar, cai para o YouTube)
     const url=lf?URL.createObjectURL(lf):'videos/'+r.arq;
     const v=document.createElement('video'); v.src=url; v.muted=muted!==false; v.autoplay=true; v.playsInline=true;
-    VID.mode=lf?'arquivo da pasta escolhida: '+lf.name:'arquivo ao lado da página videos/'+r.arq;
+    VID.mode=lf?'arquivo carregado: '+lf.name:'arquivo ao lado da página videos/'+r.arq;
     const drop=()=>{ v.pause(); v.remove(); if(lf) URL.revokeObjectURL(url) };
     v.onloadedmetadata=()=>{ v.currentTime=start }; v.onplaying=show;
     v.onerror=()=>{ drop(); VID.err='arquivo'; yt(); if(/^YouTube/.test(VID.mode)) VID.mode+=' (arquivo local falhou)'; else VID.mode='arquivo local falhou → '+VID.mode };
@@ -590,18 +614,18 @@ function armCue(el,r){
   const host=el.querySelector('.video'), vsa=!!r.vsa;
   const pill=document.createElement('div'); pill.className='armed'; if(NOPILL) pill.style.display='none'; el.appendChild(pill);
   let af=vsa?null:audioFor(r); const pend=!vsa&&pbPend(r), nm=esc(vsa?(r.arq||'vídeo'):(r.pb||'playback'));
-  let ready, noFolder; const chk=()=>{ af=vsa?null:audioFor(r); ready=vsa?!!localFor(r):!!af; noFolder=!LOCAL.size }; chk();
+  let ready, noFolder, wait; const chk=()=>{ af=vsa?null:audioFor(r); ready=vsa?(!!localFor(r)||!!(r.arq&&navigator.onLine&&/^https?:$/.test(location.protocol)&&!PREF.fail.has(norm(r.arq)))):!!af; noFolder=!hasMedia(); wait=PREF.busy&&!ready&&mediaStats().miss.some(v=>norm(v.name)===norm(vsa?r.arq:r.pb)) }; chk();
   const A={r,started:false,audio:null,url:'',pill};
   const setP=(c,t)=>{ pill.className='armed '+c; pill.innerHTML='<i></i><span>'+t+'</span>' };
   A.arm=()=>{ chk(); if(ready) setP('',vsa?'VÍDEO PRONTO · avance para iniciar':'PLAYBACK PRONTO · avance para iniciar');
-    else setP('bad',pend&&!vsa?'PLAYBACK PENDENTE (sem arquivo) · avance':noFolder?'PASTA NÃO ESCOLHIDA · aperte V e escolha a pasta com '+(vsa?'o vídeo':'os playbacks'):(vsa?'VÍDEO NÃO ESTÁ NA PASTA: ':'PLAYBACK NÃO ESTÁ NA PASTA: ')+nm) };
+    else setP(wait?'':'bad',pend&&!vsa?'PLAYBACK PENDENTE (sem arquivo) · avance':wait?'BAIXANDO O ARQUIVO… aguarde: '+nm:noFolder?'ARQUIVOS NÃO CARREGADOS (sem internet?) · aperte V e escolha a pasta':(vsa?'VÍDEO NÃO ENCONTRADO: ':'PLAYBACK NÃO ENCONTRADO: ')+nm) };
   A.start=()=>{
     chk(); A.started=true;
-    if(vsa){ el.classList.add('vsa-on'); mountVideo(host,r,false,{loop:false}); setP(ready?'go':'bad',ready?'VÍDEO NO AR · avance para seguir':(noFolder?'PASTA NÃO ESCOLHIDA (V) · avance para seguir':'VÍDEO NÃO ESTÁ NA PASTA · avance para seguir')); VID.mode+=' (com áudio)'; return }
+    if(vsa){ el.classList.add('vsa-on'); mountVideo(host,r,false,{loop:false}); setP(ready?'go':'bad',ready?'VÍDEO NO AR · avance para seguir':(noFolder?'ARQUIVOS NÃO CARREGADOS (V) · avance para seguir':'VÍDEO NÃO ENCONTRADO · avance para seguir')); VID.mode+=' (com áudio)'; return }
     if(af){ A.url=URL.createObjectURL(af); A.audio=new Audio(A.url);
       A.audio.onended=()=>setP('go','♪ PLAYBACK TERMINOU · avance para seguir');
       A.audio.play().then(()=>setP('go','♪ PLAYBACK TOCANDO · avance para seguir')).catch(()=>setP('bad','NAVEGADOR BLOQUEOU O ÁUDIO · clique na tela')) }
-    else setP('bad',pend?'SEM PLAYBACK (pendente) · avance para seguir':(noFolder?'PASTA NÃO ESCOLHIDA (V) · avance para seguir':'PLAYBACK NÃO ESTÁ NA PASTA · avance'));
+    else setP('bad',pend?'SEM PLAYBACK (pendente) · avance para seguir':(noFolder?'ARQUIVOS NÃO CARREGADOS (V) · avance para seguir':'PLAYBACK NÃO ENCONTRADO · avance'));
     mountVideo(host,r,true);
   };
   A.stop=()=>{ if(A.audio){ try{A.audio.pause()}catch(e){} A.audio=null } if(A.url){ URL.revokeObjectURL(A.url); A.url='' } };
@@ -727,10 +751,10 @@ function updateStart(){
     line(navigator.onLine?'ok':'bad','Internet: '+(navigator.onLine?'conectado':'sem conexão (vídeos viram fundo animado)'))+
     line(S.ok===true?'ok':S.ok===false?'bad':'wait','Planilha: '+(S.ok===true?`sincronizada às ${when} (${S.tel} linhas)`:S.ok===false?'não consegui ler ('+esc(S.err)+') — usando a cópia salva':(SYNC.config?'sincronizando…':'links de publicação ainda não configurados — usando a cópia embutida')))+
     line(SESS&&DATA.cfg.sessoes[SESS]?'ok':'bad',SESS?(DATA.cfg.sessoes[SESS]?`Sessão deste link: ${SESS} (${HR(SESS)})`:`Sessão ${SESS} não existe na planilha`):'Sessão: todas (use ?s=A, ?s=B…)')+
-    (()=>{ const S=localStats(); return LOCAL.size?line(S.ok===S.total?'ok':'wait',`Vídeos da pasta: ${S.ok} de ${S.total} músicas com arquivo`+(S.miss.length?' · faltam '+S.miss.length+' (D mostra quais)':'')):line('wait','Vídeos da pasta: nenhuma pasta escolhida (usa o YouTube)') })()+
-    (()=>{ const A=audioStats(); if(!A.total) return ''; const pn=A.pend.length?` · pendente: ${esc(A.pend.join(', '))}`:'';
-      if(!LOCAL.size) return line('wait',`Playbacks: ${A.total} músicas precisam de áudio — escolha a pasta`+pn);
-      return line(A.ok===A.total-A.pend.length&&!A.miss.length?(A.pend.length?'wait':'ok'):'bad',`Playbacks da pasta: ${A.ok} de ${A.total}`+(A.miss.length?' · faltam: '+esc(A.miss.join(', ')):'')+pn) })()+
+    (()=>{ const M=mediaStats(); if(!M.total) return ''; const pend=audioStats().pend, pn=pend.length?` · pendente: ${esc(pend.join(', '))}`:'';
+      if(M.busy&&M.ok<M.total) return line('wait',`Arquivos (playbacks e vídeos): baixando… ${M.ok} de ${M.total}`+pn);
+      if(!M.miss.length) return line('ok',`Arquivos (playbacks e vídeos): ${M.ok} de ${M.total} prontos`+pn+(LOCAL.size?` · pasta escolhida (${LOCAL.size})`:''));
+      return line('bad',`Arquivos (playbacks e vídeos): faltam ${M.miss.length} de ${M.total} — ${esc(M.miss.map(v=>v.name).join(', '))}${navigator.onLine?'':' (sem internet)'} · V escolhe a pasta`+pn) })()+
     line('ok',`Modo: ${DEMO?'modelo (abertura + 3 alunos por sessão) — use ?completo para todos':'completo'} · Som: ${SFX?'ligado':'desligado'}`);
   const w=document.getElementById('warn'); if(w){ if(location.protocol==='file:'){ w.style.display='block'; w.innerHTML='⚠ Arquivo aberto direto do computador (file://). O YouTube costuma recusar vídeos assim. Aperte D para ver o diagnóstico e teste na tela de uma música.' } else w.style.display='none'; }
 }
@@ -769,8 +793,7 @@ function updateDbg(){
    'planilha: '+(S.ok===true?'OK às '+S.when.toLocaleTimeString('pt-BR')+' · '+S.tel+' linhas':S.ok===false?'ERRO: '+S.err:(SYNC.config?'aguardando':'sem links'))+'   tentativas: '+S.tries,
    'dados em uso: '+DATA.cfg.built+' · '+DATA.rows.length+' linhas · sessão A '+HR('A'),
    'tela: '+(cur+1)+'/'+PL.length+' ('+it.k+')',
-   (LOCAL.size?'pasta de vídeos: '+localStats().ok+'/'+localStats().total+' com arquivo'+(localStats().miss.length?'\n  sem arquivo: '+localStats().miss.slice(0,12).join(', ')+(localStats().miss.length>12?' …':''):''):'pasta de vídeos: não escolhida'),
-   (()=>{ const A=audioStats(); return A.total?'playbacks: '+A.ok+'/'+A.total+' com arquivo'+(A.pend.length?' · pendentes: '+A.pend.join(', '):'')+(A.miss.length?'\n  sem arquivo: '+A.miss.join(', '):''):'' })(),
+   (()=>{ const M=mediaStats(); return 'arquivos: '+M.ok+'/'+M.total+' prontos'+(PREF.busy?' (baixando)':'')+' · baixados: '+REMOTE.size+' · pasta escolhida: '+(LOCAL.size||'não')+(M.miss.length?'\n  faltam: '+M.miss.map(v=>v.name+(PREF.fail.has(norm(v.name))?' [falhou]':'')).join(', '):'') })(),
    it.r?['vídeo: '+(VID.mode||'—'),'  id: '+(VID.yt||'—')+'   estado player: '+(VID.state===''?'—':VID.state)+'   erro: '+(VID.err||'—')+'   mensagens do player: '+(VID.msgs||0)].join('\n'):''
   ].join('\n');
 }
@@ -804,7 +827,7 @@ const sig=d=>JSON.stringify([d.cfg.sessoes,d.cfg.banda,d.cfg.local,d.cfg.titulo,
 function applyData(n){
   if(sig(n)===sig(DATA)){ DATA=n; return }
   const k=keyOf(PL[cur]); DATA=n; PL=playlist(); const idx=PL.findIndex(x=>keyOf(x)===k); cur=idx>=0?idx:Math.min(cur,PL.length-1);
-  hc.textContent=(cur+1)+'/'+PL.length;
+  hc.textContent=(cur+1)+'/'+PL.length; PREF.tries=0; prefetchMedia();
   const it=PL[cur];
   if(['start','splash','sessao','abertura','fim'].includes(it.k)){          // não mexe em tela de música/créditos em andamento
     const {el}=render(cur); el.classList.add('on','still'); curEl.replaceWith(el); curEl=el; post(it,el);
@@ -817,7 +840,7 @@ if('serviceWorker' in navigator && /^https?:$/.test(location.protocol)) navigato
 const pickIn=document.createElement('input'); pickIn.type='file'; pickIn.multiple=true; pickIn.setAttribute('webkitdirectory',''); pickIn.hidden=true; pickIn.id='pickdir'; document.body.appendChild(pickIn);
 pickIn.addEventListener('change',()=>{ loadFolder([...pickIn.files]); pickIn.value='' });
 addEventListener('click',e=>{ const c=e.target.closest&&e.target.closest('#pickbtn,#listbtn'); if(c){ e.stopPropagation(); if(c.id==='pickbtn') pickIn.click(); else downloadList() } },true);
-const first=parseInt(location.hash.slice(1))||1; go(first-1); showHint();
+const first=parseInt(location.hash.slice(1))||1; go(first-1); showHint(); prefetchMedia();
 </script>
 </body>
 </html>
