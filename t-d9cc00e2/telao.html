@@ -612,7 +612,7 @@ function mountVideo(host,r,muted,opt){
     const f=document.createElement('iframe');
     const q=new URLSearchParams({autoplay:1,mute:1,controls:0,disablekb:1,fs:0,rel:0,modestbranding:1,iv_load_policy:3,cc_load_policy:0,hl:'pt-BR',playsinline:1,enablejsapi:1,start:start});
     if(r.fim) q.set('end',r.fim); if(/^https?:$/.test(location.protocol)) q.set('origin',location.origin);
-    f.src='https://www.youtube-nocookie.com/embed/'+r.yt+'?'+q;
+    f.src='https://www.'+(Q.get('yt')==='nc'?'youtube-nocookie':'youtube')+'.com/embed/'+r.yt+'?'+q; // padrão: youtube.com (reconhece login Premium → sem anúncios); ?yt=nc volta ao nocookie
     f.allow='autoplay; encrypted-media; picture-in-picture'; f.referrerPolicy='strict-origin-when-cross-origin';
     const post=o=>{ try{ f.contentWindow.postMessage(typeof o==='string'?o:JSON.stringify(o),'*') }catch(e){} };
     if(ZOOM>1){ f.style.transformOrigin='50% 0'; f.style.transform='scale('+ZOOM+')' }
